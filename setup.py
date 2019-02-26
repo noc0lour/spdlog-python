@@ -50,7 +50,7 @@ setup(
                 get_pybind_include(user=True)
             ],
             libraries=['stdc++'],
-            extra_compile_args=["-std=c++11", "-v"],
+            extra_compile_args=["-std=c++11", "-v", "-fPIC"],
             language='c++11'
         )
     ],
