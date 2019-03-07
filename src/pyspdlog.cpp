@@ -105,6 +105,11 @@ public:
     register_logger(name, this);
   }
 
+  Logger(std::shared_ptr<spd::logger> logger)
+      : _logger(logger), _name(logger->name()), _async(is_async_mode_on()) {
+    register_logger(logger->name(), this);
+  }
+
   virtual ~Logger() {}
   std::string name() const {
     if (_logger)
@@ -169,6 +174,8 @@ public:
     return snks;
   }
 
+  void add_sink(Sink *sink) { _logger->sinks().push_back(sink->get_sink()); }
+
   void set_error_handler(spd::log_err_handler handler) {
     _logger->set_error_handler(handler);
   }
@@ -185,6 +192,8 @@ protected:
 void set_default_logger(Logger *default_logger) {
   spd::set_default_logger(default_logger->_logger);
 }
+
+Logger *get_default_logger() { return new Logger(spd::default_logger()); }
 
 class ConsoleLogger : public Logger {
 public:
@@ -229,6 +238,20 @@ public:
       _logger = spd::basic_logger_mt(logger_name, filename, truncate);
     } else {
       _logger = spd::basic_logger_st(logger_name, filename, truncate);
+    }
+  }
+};
+
+class FileSink : public Sink {
+public:
+  FileSink(const std::string &filename, bool multithreaded,
+           bool truncate = false) {
+    if (multithreaded) {
+      _sink =
+          std::make_shared<spd::sinks::basic_file_sink_mt>(filename, truncate);
+    } else {
+      _sink =
+          std::make_shared<spd::sinks::basic_file_sink_st>(filename, truncate);
     }
   }
 };
@@ -339,6 +362,7 @@ PYBIND11_MODULE(spdlog, m) {
     )pbdoc";
 
   m.def("set_default_logger", set_default_logger);
+  m.def("get_default_logger", get_default_logger);
 
   py::class_<LogLevel>(m, "LogLevel")
       .def_property_readonly_static("TRACE",
@@ -368,6 +392,12 @@ PYBIND11_MODULE(spdlog, m) {
       .value("utc", spdlog::pattern_time_type::utc)
       .export_values();
 
+  py::class_<Sink>(m, "Sink");
+
+  py::class_<FileSink, Sink>(m, "FileSink")
+      .def(py::init<std::string, bool, bool>(), py::arg("filename"),
+           py::arg("multithreaded") = false, py::arg("truncated") = false);
+
   py::class_<Logger>(m, "Logger")
       .def("log", &Logger::log)
       .def("trace", &Logger::trace)
@@ -388,7 +418,8 @@ PYBIND11_MODULE(spdlog, m) {
       .def("async", &Logger::async)
       .def("sinks", &Logger::sinks)
       .def("set_error_handler", &Logger::set_error_handler)
-      .def("error_handler", &Logger::error_handler);
+      .def("error_handler", &Logger::error_handler)
+      .def("add_sink", &Logger::add_sink);
 
   py::class_<ConsoleLogger, Logger>(m, "ConsoleLogger")
       .def(py::init<std::string, bool, bool, bool>(), py::arg("name"),
